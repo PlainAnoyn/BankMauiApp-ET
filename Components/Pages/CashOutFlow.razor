@@ -1,0 +1,135 @@
+@page "/cashoutflow"
+@using ET.Models
+@inject ET.Services.TransactionService TransactionService
+@inject ET.Services.UserService UserService
+@inject IJSRuntime JSRuntime
+
+<h1>Cash Out Flows</h1>
+
+@if (cashOutflows == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>User Name</th>
+                <th>Amount</th>
+                <th>Date</th>
+                <th>Category</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var cashOutFlow in cashOutflows)
+            {
+                <tr>
+                    <td>@cashOutFlow.Id</td>
+                    <td>@users.FirstOrDefault(u => u.Id == cashOutFlow.UserId)?.Name</td>
+                    <td>@cashOutFlow.Amount</td>
+                    <td>@cashOutFlow.Date.ToString("MM/dd/yyyy")</td>
+                    <td>@cashOutFlow.Category</td>
+                    <td>@cashOutFlow.Description</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h2>Add New Cash Out Flow</h2>
+<EditForm Model="newCashOutFlow" OnValidSubmit="HandleCashOutFlowSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="userId">User</label>
+        <select id="userId" @bind="newCashOutFlow.UserId" class="form-control" required>
+            <option value="" disabled selected>Select a User</option>
+            @foreach (var user in users)
+            {
+                <option value="@user.Id">@user.Name</option>
+            }
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="amount">Amount</label>
+        <InputNumber id="amount" @bind-Value="newCashOutFlow.Amount" class="form-control" required />
+    </div>
+
+    <div class="form-group">
+        <label for="category">Category</label>
+        <InputText id="category" @bind-Value="newCashOutFlow.Category" class="form-control" required />
+    </div>
+
+    <div class="form-group">
+        <label for="description">Description</label>
+        <InputText id="description" @bind-Value="newCashOutFlow.Description" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="date">Date</label>
+        <InputDate id="date" @bind-Value="newCashOutFlow.Date" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <button type="submit" class="btn btn-primary">Add Cash Out Flow</button>
+    </div>
+</EditForm>
+
+@code {
+    private List<CashFlow> cashOutflows;
+    private CashFlow newCashOutFlow = new CashFlow { IsInflow = false, Date = DateTime.Now };
+    private List<User> users;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            cashOutflows = await TransactionService.GetCashOutflowsAsync();
+            users = UserService.GetAllUsers();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading cash outflows: {ex.Message}");
+        }
+    }
+
+    private async Task HandleCashOutFlowSubmit()
+    {
+        try
+        {
+            if (newCashOutFlow.Date == default)
+            {
+                newCashOutFlow.Date = DateTime.Now;
+            }
+            var result = await TransactionService.AddCashOutflowAsync(newCashOutFlow);
+
+            if (!string.IsNullOrEmpty(result))
+            {
+                // Show error alert
+                await JSRuntime.InvokeVoidAsync("alert", $"Error: {result}");
+                return;
+            }
+
+            // Show success alert
+            await JSRuntime.InvokeVoidAsync("alert", "Transaction Successful!");
+
+            // Reset form
+            newCashOutFlow = new CashFlow { IsInflow = false, Date = DateTime.Now };
+
+            // Refresh cash outflows
+            cashOutflows = await TransactionService.GetCashOutflowsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding cash outflow: {ex.Message}");
+
+            // Show error alert
+            await JSRuntime.InvokeVoidAsync("alert", $"Error: Unable to add cash outflow. {ex.Message}");
+        }
+    }
+}

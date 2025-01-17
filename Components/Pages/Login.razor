@@ -1,0 +1,77 @@
+@page "/login"
+@using ET.Models
+@using ET.Services
+@inject UserService UserService
+@inject NavigationManager Navigation
+@inject CustomAuthenticationStateProvider AuthStateProvider
+
+<h3>Login</h3>
+
+<EditForm Model="loginModel" OnValidSubmit="HandleLoginSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <InputText id="email" @bind-Value="loginModel.Email" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="password">Password</label>
+        <InputText id="password" @bind-Value="loginModel.Password" type="password" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="currency">Select Currency</label>
+        <select id="currency" @bind="selectedCurrency" class="form-select">
+            <option value="USD">USD</option>
+            <option value="NPR">NPR</option>
+            <option value="INR">INR</option>
+        </select>
+    </div>
+
+    <button type="submit" class="btn btn-primary">Login</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div class="alert alert-danger">@errorMessage</div>
+}
+
+@if (!string.IsNullOrEmpty(selectedCurrency))
+{
+    <p>Selected Currency: @selectedCurrency</p>
+}
+
+@code {
+    private User loginModel = new User();
+    private string errorMessage;
+    private string selectedCurrency = "USD"; // Default currency
+
+    private async Task HandleLoginSubmit()
+    {
+        try
+        {
+            var user = await UserService.LoginUserAsync(loginModel.Email, loginModel.Password);
+            if (user != null)
+            {
+                // Mark user as authenticated
+                AuthStateProvider.MarkUserAsAuthenticated(user.Email);
+
+                // You can store the selected currency somewhere or pass it to the next page if needed
+                Console.WriteLine($"User selected currency: {selectedCurrency}");
+
+                // Navigate to the dashboard
+                Navigation.NavigateTo("/dashboard");
+            }
+            else
+            {
+                errorMessage = "Invalid login attempt.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+    }
+}

@@ -1,0 +1,172 @@
+@page "/dashboard"
+@attribute [Authorize] // Ensure the user is authorized to access this page
+@using Microsoft.AspNetCore.Authorization
+@using ET.Models
+@inject ET.Services.TransactionService TransactionService
+@inject ET.Services.UserService UserService
+@inject IJSRuntime JSRuntime
+<link rel="stylesheet" href="css/bootstrap/dashboard.css" />
+
+<h1>Dashboard</h1>
+
+@if (IsLoading)
+{
+    <p>Loading...</p>
+    // Display a loading message while data is being fetched
+}
+else if (HasError)
+{
+    <div class="alert alert-danger">
+        <strong>Error:</strong> Unable to load data. Please try again later.
+    </div>
+    // Display an error message if there's an issue fetching data
+}
+else
+{
+    <div class="dashboard-cards">
+        <div class="card">
+            <h3>Current Balance</h3>
+            <p class="amount">$@mainBalance?.ToString("F2")</p>
+        </div>
+        <div class="card">
+            <h3>Total Debt</h3>
+            <p class="amount">$@totalDebt?.ToString("F2")</p>
+        </div>
+    </div>
+
+    <!-- Date Range Filter -->
+    <div class="date-filter mb-4">
+        <label for="startDate" class="form-label">Start Date:</label>
+        <InputDate id="startDate" @bind-Value="startDate" class="form-control" />
+
+        <label for="endDate" class="form-label">End Date:</label>
+        <InputDate id="endDate" @bind-Value="endDate" class="form-control" />
+
+        <button class="btn btn-primary mt-2" @onclick="ApplyDateFilter">Apply Filter</button>
+    </div>
+
+    <div>
+        <h2>Debt Transactions</h2>
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Amount</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var debt in filteredDebts)
+                {
+                    <tr>
+                        <td>@debt.Id</td>
+                        <td>@debt.Amount.ToString("C")</td>
+                        <td>@debt.Date.ToString("MM/dd/yyyy")</td>
+                        <td>@(debt.IsCleared ? "Cleared" : "Pending")</td>
+                        <td>
+                            @if (!debt.IsCleared)
+                            {
+                                <button class="btn btn-primary" @onclick="() => ClearDebt(debt.Id, debt.Amount)">
+                                    Clear Debt
+                                </button>
+                                // Button to clear debt if it's not already cleared
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private User user;
+    private decimal? mainBalance;
+    private decimal? totalDebt;
+    private List<Debt> debts;
+    private List<Debt> filteredDebts;
+    private bool IsLoading = true;
+    private bool HasError = false;
+    private DateTime? startDate;
+    private DateTime? endDate;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            int userId = GetLoggedInUserId(); // Implement this function to get the logged-in user's ID
+
+            user = await UserService.GetUserByIdAsync(userId);
+            mainBalance = await TransactionService.GetMainBalanceAsync();
+            totalDebt = await TransactionService.GetTotalDebtAsync();
+            debts = await TransactionService.GetDebtsAsync();
+
+            // Initialize filteredDebts to include all debts initially
+            filteredDebts = debts;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching dashboard data: {ex.Message}");
+            HasError = true;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void ApplyDateFilter()
+    {
+        if (startDate.HasValue || endDate.HasValue)
+        {
+            filteredDebts = debts.Where(d =>
+                (!startDate.HasValue || d.Date >= startDate.Value) &&
+                (!endDate.HasValue || d.Date <= endDate.Value)).ToList();
+        }
+        else
+        {
+            // If no date filters are applied, reset to the full list
+            filteredDebts = debts;
+        }
+    }
+
+    private async Task ClearDebt(int debtId, decimal debtAmount)
+    {
+        if (mainBalance.HasValue && mainBalance.Value >= debtAmount)
+        {
+            try
+            {
+                // Call the service to clear the debt
+                await TransactionService.ClearDebtByIdAsync(debtId);
+
+                // Update balance and debt list after clearing
+                mainBalance = await TransactionService.GetMainBalanceAsync();
+                totalDebt = await TransactionService.GetTotalDebtAsync();
+                debts = await TransactionService.GetDebtsAsync();
+
+                // Reapply filters after updating debts
+                ApplyDateFilter();
+
+                // Show alert for cleared debt
+                await JSRuntime.InvokeVoidAsync("alert", "Debt cleared!");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error clearing debt: {ex.Message}");
+            }
+        }
+        else
+        {
+            // Show alert for insufficient balance
+            await JSRuntime.InvokeVoidAsync("alert", "Insufficient amount!");
+        }
+    }
+
+    private int GetLoggedInUserId()
+    {
+        // Placeholder method to get the logged-in user's ID
+        return 1; // Example ID
+    }
+}

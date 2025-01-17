@@ -1,0 +1,21 @@
+@page "/"
+@inject NavigationManager Navigation
+
+<h3>Welcome to Our Application</h3>
+
+<p>Please choose an option below:</p>
+
+<button @onclick="NavigateToLogin" class="btn btn-primary">Login</button>
+<button @onclick="NavigateToRegister" class="btn btn-secondary">Register</button>
+
+@code {
+    private void NavigateToLogin()
+    {
+        Navigation.NavigateTo("/login");
+    }
+
+    private void NavigateToRegister()
+    {
+        Navigation.NavigateTo("/register");
+    }
+}

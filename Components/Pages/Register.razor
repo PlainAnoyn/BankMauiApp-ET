@@ -1,0 +1,56 @@
+@page "/register"
+@using ET.Models
+@using ET.Services
+@inject UserService UserService
+@inject NavigationManager Navigation
+@inject CustomAuthenticationStateProvider AuthStateProvider
+
+<h3>Register</h3>
+
+<EditForm Model="registerModel" OnValidSubmit="HandleRegisterSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="name">Name</label>
+        <InputText id="name" @bind-Value="registerModel.Name" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="email">Email</label>
+        <InputText id="email" @bind-Value="registerModel.Email" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <label for="password">Password</label>
+        <InputText id="password" @bind-Value="registerModel.Password" type="password" class="form-control" />
+    </div>
+
+    <button type="submit" class="btn btn-primary">Register</button>
+</EditForm>
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+        <div class="alert alert-danger">@errorMessage</div>
+}
+
+@code {
+    private User registerModel = new User();
+    private string errorMessage;
+
+    private async Task HandleRegisterSubmit()
+    {
+        try
+        {
+            await UserService.RegisterUserAsync(registerModel);
+            // Mark user as authenticated
+            AuthStateProvider.MarkUserAsAuthenticated(registerModel.Email);
+            // Navigate to the dashboard after successful registration
+            Navigation.NavigateTo("/login");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"An error occurred: {ex.Message}";
+        }
+    }
+}

@@ -1,0 +1,130 @@
+@page "/debts"
+@using ET.Models
+@inject ET.Services.TransactionService TransactionService
+@inject ET.Services.UserService UserService
+@inject IJSRuntime JSRuntime
+@* @layout MainLayout *@
+
+<h1>User Debts</h1>
+
+@if (debts == null)
+{
+        <p>Loading...</p>
+}
+else
+{
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Debt ID</th>
+                    <th>User Name</th>
+                    <th>Total Debt</th>
+                    <th>Paid Amount</th>
+                    <th>Remaining Debt</th>
+                    <th>Date</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var debt in debts)
+            {
+                        <tr>
+                            <td>@debt.Id</td>
+                            <td>@UserService.GetAllUsers().FirstOrDefault(u => u.Id == debt.UserId)?.Name</td>
+                            <td>@debt.Amount</td>
+                            <td>@debt.PaidAmount</td>
+                            <td>@(debt.Amount - debt.PaidAmount)</td>
+                            <td>@debt.Date.ToString("MM/dd/yyyy")</td>
+                            <td>@debt.Description</td>
+                        </tr>
+            }
+            </tbody>
+        </table>
+}
+
+<h2>Add New Debt</h2>
+<EditForm Model="newDebt" OnValidSubmit="HandleDebtSubmit">
+    <DataAnnotationsValidator />
+    <ValidationSummary />
+
+    <div class="form-group">
+        <label for="userId">User</label>
+        <select id="userId" @bind="newDebt.UserId" class="form-control" required>
+            <option value="" disabled selected>Select a User</option>
+            @foreach (var user in UserService.GetAllUsers())
+            {
+                    <option value="@user.Id">@user.Name</option>
+            }
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label for="amount">Debt Amount</label>
+        <InputNumber id="amount" @bind-Value="newDebt.Amount" class="form-control" required />
+    </div>
+
+    <div class="form-group">
+        <label for="paidAmount">Paid Amount</label>
+        <InputNumber id="paidAmount" @bind-Value="newDebt.PaidAmount" class="form-control" required />
+    </div>
+
+    <div class="form-group">
+        <label for="description">Description</label>
+        <InputText id="description" @bind-Value="newDebt.Description" class="form-control" />
+    </div>
+
+    <div class="form-group">
+        <button type="submit" class="btn btn-primary">Add Debt</button>
+    </div>
+</EditForm>
+
+@code {
+    private List<Debt> debts;
+    private Debt newDebt = new Debt();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            debts = TransactionService.GetDebts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error fetching debts: {ex.Message}");
+        }
+    }
+
+    private async Task HandleDebtSubmit()
+{
+    try
+    {
+        if (newDebt.PaidAmount > newDebt.Amount)
+        {
+            // Alert if paid amount exceeds total debt
+            await JSRuntime.InvokeVoidAsync("alert", "Paid amount cannot exceed total debt amount.");
+            return;
+        }
+
+        newDebt.Date = DateTime.Now;
+
+        // Add debt asynchronously
+        await TransactionService.AddDebtAsync(newDebt);
+
+        // Show success alert
+        await JSRuntime.InvokeVoidAsync("alert", "Debt added successfully!");
+
+        // Reset form
+        newDebt = new Debt();
+
+        // Refresh debts
+        debts = TransactionService.GetDebts();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Error adding debt: {ex.Message}");
+
+        // Show error alert for exceptions
+        await JSRuntime.InvokeVoidAsync("alert", $"Error: Unable to add debt. {ex.Message}");
+    }
+}
+}

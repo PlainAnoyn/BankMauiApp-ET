@@ -1,0 +1,260 @@
+@page "/transactions"
+@using ET.Models
+@inject ET.Services.TransactionService TransactionService
+@inject ET.Services.UserService UserService
+
+<h1>Transactions</h1>
+
+@if (transactions == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <!-- Filter Section -->
+    <div class="mb-3">
+        <label for="startDate" class="form-label">Start Date:</label>
+        <InputDate id="startDate" @bind-Value="startDate" class="form-control" />
+
+        <label for="endDate" class="form-label">End Date:</label>
+        <InputDate id="endDate" @bind-Value="endDate" class="form-control" />
+    </div>
+    <div class="mb-3">
+        <label for="searchTerm" class="form-label">Search by Name:</label>
+        <input id="searchTerm" @bind="searchTerm" class="form-control" />
+    </div>
+    @* <div class="mb-3"> *@
+    @*     <label for="transactionType" class="form-label">Transaction Type:</label> *@
+    @*     <option value="">All</option> *@
+    @*     <option value="CashInflow">Cash Inflow</option> *@
+    @*     <option value="CashOutflow">Cash Outflow</option> *@
+    @*     <option value="Debt">Debt</option> *@
+    @* </div> *@
+    <div class="mb-3">
+        <label for="sortBy" class="form-label">Sort By:</label>
+        <select id="sortBy" class="form-select" @onchange="(e) => SortTransactions(((ChangeEventArgs)e).Value.ToString())">
+            <option value="AmountAsc" selected="@((sortBy == "AmountAsc") ? "selected" : null)">Amount (Low to High)</option>
+            <option value="AmountDesc" selected="@((sortBy == "AmountDesc") ? "selected" : null)">Amount (High to Low)</option>
+            <option value="DateAsc" selected="@((sortBy == "DateAsc") ? "selected" : null)">Date (Oldest to Newest)</option>
+            <option value="DateDesc" selected="@((sortBy == "DateDesc") ? "selected" : null)">Date (Newest to Oldest)</option>
+        </select>
+    </div>
+    <button class="btn btn-primary mb-3" @onclick="ApplyFiltersAndSearch">Apply Filters</button>
+
+    <table class="table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>User Name</th>
+                <th>Amount</th>
+                <th>Debit</th>
+                <th>Credit</th>
+                <th>Date</th>
+                <th>Source/Category</th>
+                <th>Paid Amount</th>
+                <th>Remaining Debt</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var transaction in filteredTransactions)
+            {
+                <tr>
+                    <td>@transaction.Id</td>
+                    <td>@userNames[transaction.UserId]</td>
+                    <td>@transaction.Amount</td>
+                    <td>@(transaction.Type == "Transaction" ? transaction.Debit : 0)</td>
+                    <td>@(transaction.Type == "Transaction" ? transaction.Credit : 0)</td>
+                    <td>@transaction.Date.ToString("MM/dd/yyyy")</td>
+                    <td>@transaction.SourceOrCategory</td>
+                    <td>@(transaction.Type == "Debt" ? transaction.PaidAmount : 0)</td>
+                    <td>@(transaction.Type == "Debt" ? transaction.RemainingDebt : 0)</td>
+                    <td>
+                        <button class="btn btn-warning btn-sm" @onclick="() => EditTransaction(transaction)">Edit</button>
+                        <button class="btn btn-danger btn-sm" @onclick="() => DeleteTransaction(transaction.Id)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (isEditing)
+{
+    <EditForm Model="editingTransaction" OnValidSubmit="SaveTransaction">
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+        <div class="form-group">
+            <label for="amount">Amount</label>
+            <InputNumber id="amount" @bind-Value="editingTransaction.Amount" class="form-control" />
+        </div>
+        <div class="form-group">
+            <label for="date">Date</label>
+            <InputDate id="date" @bind-Value="editingTransaction.Date" class="form-control" />
+        </div>
+        <button type="submit" class="btn btn-primary">Save</button>
+        <button type="button" class="btn btn-secondary" @onclick="CancelEdit">Cancel</button>
+    </EditForm>
+}
+
+@code {
+    private List<TransactionViewModel> transactions;
+    private List<TransactionViewModel> filteredTransactions;
+    private Dictionary<int, string> userNames = new();
+    private TransactionViewModel editingTransaction;
+    private bool isEditing = false;
+    private string sortBy = "AmountAsc"; // Default sorting by amount ascending
+    private string searchTerm;
+    private DateTime? startDate;
+    private DateTime? endDate;
+    private string filterTransactionType;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTransactionsAsync();
+    }
+
+    private async Task LoadTransactionsAsync()
+    {
+        try
+        {
+            var users = await UserService.GetAllUsersAsync();
+            foreach (var user in users)
+            {
+                userNames[user.Id] = user.Name;
+            }
+
+            var cashInflows = await TransactionService.GetCashInflowsAsync();
+            var cashOutflows = await TransactionService.GetCashOutflowsAsync();
+            var debts = await TransactionService.GetDebtsAsync();
+
+            transactions = new List<TransactionViewModel>();
+
+            transactions.AddRange(cashInflows.Select(inflow => new TransactionViewModel
+                {
+                    Id = inflow.Id,
+                    UserId = inflow.UserId,
+                    Amount = inflow.Amount,
+                    Date = inflow.Date,
+                    SourceOrCategory = inflow.Category,
+                    Type = "CashInflow"
+                }));
+
+            transactions.AddRange(cashOutflows.Select(outflow => new TransactionViewModel
+                {
+                    Id = outflow.Id,
+                    UserId = outflow.UserId,
+                    Amount = outflow.Amount,
+                    Date = outflow.Date,
+                    SourceOrCategory = outflow.Category,
+                    Type = "CashOutflow"
+                }));
+
+            transactions.AddRange(debts.Select(debt => new TransactionViewModel
+                {
+                    Id = debt.Id,
+                    UserId = debt.UserId,
+                    Amount = debt.Amount,
+                    Date = debt.Date,
+                    SourceOrCategory = debt.Description,
+                    PaidAmount = debt.PaidAmount,
+                    RemainingDebt = debt.Amount - debt.PaidAmount,
+                    Type = "Debt"
+                }));
+
+            filteredTransactions = transactions;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading transactions: {ex.Message}");
+        }
+    }
+
+    private void ApplyFiltersAndSearch()
+    {
+        filteredTransactions = transactions
+            .Where(t => !startDate.HasValue || t.Date >= startDate.Value)
+            .Where(t => !endDate.HasValue || t.Date <= endDate.Value)
+            .Where(t => string.IsNullOrEmpty(searchTerm) || userNames[t.UserId].Contains(searchTerm, StringComparison.OrdinalIgnoreCase))
+            .Where(t => string.IsNullOrEmpty(filterTransactionType) || t.Type == filterTransactionType)
+            .ToList();
+
+        SortTransactions(sortBy);
+    }
+
+    private void SortTransactions(string sortOrder)
+    {
+        sortBy = sortOrder;
+
+        filteredTransactions = sortBy switch
+        {
+            "AmountAsc" => filteredTransactions.OrderBy(t => t.Amount).ToList(),
+            "AmountDesc" => filteredTransactions.OrderByDescending(t => t.Amount).ToList(),
+            "DateAsc" => filteredTransactions.OrderBy(t => t.Date).ToList(),
+            "DateDesc" => filteredTransactions.OrderByDescending(t => t.Date).ToList(),
+            _ => filteredTransactions
+        };
+    }
+
+    private void EditTransaction(TransactionViewModel transaction)
+    {
+        editingTransaction = transaction;
+        isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        editingTransaction = null;
+        isEditing = false;
+    }
+
+    private async Task SaveTransaction()
+    {
+        try
+        {
+            await TransactionService.UpdateTransactionAsync(new Transaction
+                {
+                    Id = editingTransaction.Id,
+                    UserId = editingTransaction.UserId,
+                    Amount = editingTransaction.Amount,
+                    Date = editingTransaction.Date,
+                    Description = editingTransaction.SourceOrCategory
+                });
+
+            isEditing = false;
+            editingTransaction = null;
+            await LoadTransactionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving transaction: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteTransaction(int id)
+    {
+        try
+        {
+            await TransactionService.DeleteTransactionAsync(id);
+            await LoadTransactionsAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting transaction: {ex.Message}");
+        }
+    }
+
+    private class TransactionViewModel
+    {
+        public int Id { get; set; }
+        public int UserId { get; set; }
+        public decimal Amount { get; set; }
+        public DateTime Date { get; set; }
+        public string SourceOrCategory { get; set; }
+        public decimal PaidAmount { get; set; }
+        public decimal RemainingDebt { get; set; }
+        public string Type { get; set; }
+        public decimal Debit { get; set; }  // Added Debit property
+        public decimal Credit { get; set; } // Added Credit property
+    }
+}

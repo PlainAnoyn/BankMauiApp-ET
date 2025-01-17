@@ -1,0 +1,24 @@
+﻿@inherits LayoutComponentBase
+
+<PageTitle>My Blazor App</PageTitle>
+
+<CascadingAuthenticationState>
+    <div class="page">
+        <AuthorizeView>
+            <Authorized>
+                <div class="sidebar">
+                    <NavMenu />
+                </div>
+            </Authorized>
+            <NotAuthorized>
+                <p>Please log in to access the navigation menu.</p>
+            </NotAuthorized>
+        </AuthorizeView>
+
+        <main>
+            <div class="content px-4">
+                @Body
+            </div>
+        </main>
+    </div>
+</CascadingAuthenticationState>
